@@ -62,7 +62,7 @@ fn vlib_command(options [][]string) string {
 		return '{"content": "Only letters, numbers, ., and _ are allowed in queries."}'
 	}
 
-	result := os.execute("v doc -f json -o stdout $vlib_module $query")
+	result := os.execute("v doc -f json -o stdout $vlib_module")
 
 	if result.exit_code != 0 {
 		return '{"content": "Module `$vlib_module` not found."}'
