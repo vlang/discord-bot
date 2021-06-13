@@ -46,15 +46,21 @@ fn sanitize(argument string) ? {
 	for letter in argument {
 		match letter {
 			`0`...`9`, `a`...`z`, `A`...`Z`, `.`, `_` {}
-			else { return error('') }
+			else { return none }
 		}
 	}
+}
+
+struct Section {
+	name string
+	content string
+	comments []string
 }
 
 fn vlib_command(options [][]string) string {
 	vlib_module := options[0][1]
 	query := options[1][1]
-
+	
 	sanitize(vlib_module) or {
 		return '{"content": "Only letters, numbers, ., and _ are allowed in module names."}'
 	}
@@ -73,24 +79,44 @@ fn vlib_command(options [][]string) string {
 		return '{"content": "Decoding `v doc` json failed."}'
 	}
 
-	sections := json.as_map()['contents'].arr().filter(it.as_map()['name'].str() == query)
+	mut lowest, mut closest := 2147483647, Section{}
+	sections := json.as_map()['contents'].arr()
 
-	if sections.len < 1 {
-		return '{"content": "No match found for `$query` in `$vlib_module`."}'
+	for section_ in sections {
+		section := section_.as_map()
+		name := section["name"].str()
+		score := strings.levenshtein_distance(query, name)
+
+		if score < lowest {
+			lowest = score
+			closest = Section {
+				name: name
+				content: section["content"].json_str()
+				comments: section["comments"].arr().map(it.as_map()["text"].json_str())
+			}
+		}
+
+		for child_ in section["children"].arr() {
+			child := child_.as_map()
+			child_name := child["name"].str()
+			child_score := strings.levenshtein_distance(query, child_name)
+
+			if child_score < lowest {
+				lowest = child_score
+				closest = Section {
+					name: child_name
+					content: child["content"].json_str()
+					comments: child["comments"].arr().map(it.as_map()["text"].json_str())
+				}
+			}
+		}
 	}
 
-	section := sections[0].as_map()
-	code := section['content'].json_str()
-
-	mut description := '```v\\n$code```'
+	mut description := '```v\\n$closest.content```'
 	mut blob := ''
 
-	for comment in section['comments'].arr() {
-		text := comment.as_map()['text'].json_str()
-
-		if text.len > 1 {
-			blob += text[1..]
-		}
+	for comment in closest.comments {
+		blob += comment.trim_left("\u0001")
 	}
 
 	if blob != '' {
@@ -100,9 +126,9 @@ fn vlib_command(options [][]string) string {
 	return '{
 		"embeds": [
 			{
-				"title": "$vlib_module $query", 
+				"title": "$vlib_module $closest.name", 
 				"description": "$description",
-				"url": "https://modules.vlang.io/${vlib_module}.html#$query",
+				"url": "https://modules.vlang.io/${vlib_module}.html#$closest.name",
 				"color": 4360181
 			}
 		]
