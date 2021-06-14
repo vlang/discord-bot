@@ -5,16 +5,24 @@ import x.json2
 import strings
 import arrays
 import json
+import regex
 
-const bot_token = os.getenv('VBOT_TOKEN')
+const (
+	bot_token = os.getenv('VBOT_TOKEN')
+	user = os.execute('logname').output.trim_right("\n")
+	vexeroot = @VEXEROOT
+)
 
 struct State {
 	headers []string
 }
 
 fn main() {
+	os.execute("isolate --cleanup")
+
 	mut client := discord.new(token: bot_token) ?
 	client.userdata = &State{load_docs_headers()}
+	client.on_message_create(on_message)
 	client.on_interaction_create(on_interaction)
 	client.run().wait()
 }
@@ -46,7 +54,7 @@ fn sanitize(argument string) ? {
 	for letter in argument {
 		match letter {
 			`0`...`9`, `a`...`z`, `A`...`Z`, `.`, `_` {}
-			else { return none }
+			else { return error("Illegal character.") }
 		}
 	}
 }
@@ -138,7 +146,7 @@ fn vlib_command(options [][]string) string {
 fn load_docs_headers() []string {
 	mut headers := []string{}
 
-	content := os.read_file('$os.home_dir()/.v/doc/docs.md') or { panic(err) }
+	content := os.read_file('$vexeroot/doc/docs.md') or { panic(err) }
 
 	for line in content.split_into_lines() {
 		stripped := line.trim_space()
@@ -162,4 +170,45 @@ fn docs_command(options [][]string, headers []string) string {
 	header := headers[scores.index(lowest)]
 
 	return '{"content": "<https://github.com/vlang/v/blob/master/doc/docs.md$header>"}'
+}
+
+fn on_message(mut client discord.Client, message &discord.Message) {
+	content := message.content
+	mut re := regex.regex_opt(r"/run ```[a-z]*\s+(.*)```") or { panic(err.msg) }
+	start, _ := re.match_string(content)
+	
+	if start != -1 {
+		roles := message.member.roles
+		mut authorized := false
+
+		// v-dev, moderator, owner
+		for role in ["671405628023111731", "592107317705703427", "595009999227453444"] {
+			if role in roles {
+				authorized = true
+			}
+		}
+
+		if !authorized {
+			client.channel_message_send(message.channel_id, content: "You aren't authorized to use eval.") or {}
+			return
+		}
+		
+		group := re.get_group_list()[0]
+		code := content[group.start..group.end]
+		resp := "```\n${run_in_sandbox(code)}\n```"
+		client.channel_message_send(message.channel_id, content: resp) or {}
+	}
+}
+
+fn run_in_sandbox(code string) string {
+	iso_res := os.execute("isolate --init")
+	defer { 
+		os.execute("isolate --cleanup") 
+	}
+	box_path := os.join_path(iso_res.output.trim_suffix("\n"), "box")
+	os.write_file(os.join_path(box_path, "code.v"), code) or {
+		return "Failed to write code to sandbox."
+	}
+	run_res := os.execute("su $user -c 'sudo isolate --dir=$vexeroot --env=HOME=/box --processes=3 --mem=100000 --wall-time=5 --run $vexeroot/v run code.v'") // TODO: limit disk usage
+	return run_res.output
 }
