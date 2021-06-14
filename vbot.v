@@ -11,6 +11,8 @@ const (
 	bot_token = os.getenv('VBOT_TOKEN')
 	user = os.execute('logname').output.trim_right("\n")
 	vexeroot = @VEXEROOT
+	block_size = 4096
+	inode_ratio = 16384
 )
 
 struct State {
@@ -209,6 +211,21 @@ fn run_in_sandbox(code string) string {
 	os.write_file(os.join_path(box_path, "code.v"), code) or {
 		return "Failed to write code to sandbox."
 	}
-	run_res := os.execute("su $user -c 'sudo isolate --dir=$vexeroot --env=HOME=/box --processes=3 --mem=100000 --wall-time=5 --run $vexeroot/v run code.v'") // TODO: limit disk usage
-	return run_res.output
+	run_res := os.execute("su $user -c 'sudo isolate --dir=$vexeroot --env=HOME=/box --processes=3 --mem=100000 --wall-time=5 --quota=${1048576 / block_size},${1048576 / inode_ratio} --run $vexeroot/v run code.v'")
+	return prettify(run_res.output)
+}
+
+fn prettify(output string) string  {
+	mut pretty := output
+
+	if pretty.len > 1992 {
+		pretty = pretty[..1989] + "..."
+	}
+
+	nlines := pretty.count("\n")
+	if nlines > 5 {
+		pretty = pretty.split_into_lines()[..5].join_lines() + "\n...and ${nlines - 5} more"
+	}
+
+	return pretty
 }
