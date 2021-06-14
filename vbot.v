@@ -9,7 +9,7 @@ import regex
 
 const (
 	bot_token = os.getenv('VBOT_TOKEN')
-	user = os.execute('logname').output.trim_right("\n")
+	user = os.getenv('ISOLATE_USER')
 	vexeroot = @VEXEROOT
 	block_size = 4096
 	inode_ratio = 16384
