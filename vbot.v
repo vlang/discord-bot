@@ -176,7 +176,7 @@ fn docs_command(options [][]string, headers []string) string {
 
 fn on_message(mut client discord.Client, message &discord.Message) {
 	content := message.content
-	mut re := regex.regex_opt(r"/run ```[a-z]*\s+(.*)```") or { panic(err.msg) }
+	mut re := regex.regex_opt(r"/run\s+```[a-z]*\s+(.*)```") or { panic(err.msg) }
 	start, _ := re.match_string(content)
 	
 	if start != -1 {
