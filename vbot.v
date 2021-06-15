@@ -9,7 +9,6 @@ import regex
 
 const (
 	bot_token = os.getenv('VBOT_TOKEN')
-	user = os.getenv('ISOLATE_USER')
 	vexeroot = @VEXEROOT
 	block_size = 4096
 	inode_ratio = 16384
@@ -211,7 +210,7 @@ fn run_in_sandbox(code string) string {
 	os.write_file(os.join_path(box_path, "code.v"), code) or {
 		return "Failed to write code to sandbox."
 	}
-	run_res := os.execute("su $user -c 'sudo isolate --dir=$vexeroot --env=HOME=/box --processes=3 --mem=100000 --wall-time=5 --quota=${1048576 / block_size},${1048576 / inode_ratio} --run $vexeroot/v run code.v'")
+	run_res := os.execute("isolate --dir=$vexeroot --env=HOME=/box --processes=3 --mem=100000 --wall-time=5 --quota=${1048576 / block_size},${1048576 / inode_ratio} --run $vexeroot/v run code.v")
 	return prettify(run_res.output)
 }
 
